@@ -188,5 +188,5 @@ The community edition is complete and production-ready — not a teaser.
 
 ## License
 
-Community edition: [MIT](LICENSE)  
+Community edition: [Apache 2.0](LICENSE)
 Enterprise Control Plane: Commercial — contact for licensing.
