@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://negotex.io/protocol/envelope/v1",
+  "title": "Negotex Envelope",
+  "description": "Immutable execution unit — the Negotex implementation of the BPMN token.",
+  "type": "object",
+  "required": [
+    "envelopeId",
+    "processInstanceId",
+    "processDefinitionId",
+    "processVersion",
+    "createdAt",
+    "nodeEnteredAt",
+    "payload"
+  ],
+  "properties": {
+    "envelopeId":            { "type": "string", "format": "uuid" },
+    "processInstanceId":     { "type": "string", "format": "uuid" },
+    "processDefinitionId":   { "type": "string" },
+    "processVersion":        { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "previousEnvelopeHash":  { "type": ["string", "null"], "description": "ADR-028 chain hash. Null for genesis envelope." },
+    "createdAt":             { "type": "string", "format": "date-time" },
+    "nodeEnteredAt":         { "type": "string", "format": "date-time" },
+    "payload": {
+      "type": "object",
+      "description": "Accumulated process data. The _hash key is reserved.",
+      "properties": {
+        "_hash": { "type": "string", "description": "SHA-256 of the initial payload. Set by Trigger, never modified." }
+      }
+    }
+  }
+}
