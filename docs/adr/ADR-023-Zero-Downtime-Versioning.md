@@ -42,7 +42,7 @@ process:
 
 `drainTimeout` sets the maximum time to wait before force-removing old instances. Any instances still running after the timeout move to the DLQ with a migration-timeout error.
 
-A `gradual-rollout` strategy (percentage-based traffic split between versions) is planned for the Enterprise Control Plane.
+A `gradual-rollout` strategy (percentage-based traffic split between versions) is planned for the Enterprise Control Plane. A differential subgraph deployment is also planned as an Enterprise Control Plane feature.
 
 ## Consequences
 

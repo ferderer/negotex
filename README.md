@@ -181,7 +181,7 @@ The community edition is complete and production-ready — not a teaser.
 
 ## Documentation
 
-- [`/docs/adr/`](./docs/adr/) — Architecture Decision Records
+- [`/docs/ADRs.md`](./docs/ADRs.md) — Architecture Decision Records
 - [`/docs/arc42.md`](./docs/arc42.md) — System architecture (arc42 format)
 
 ---
