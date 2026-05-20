@@ -105,16 +105,17 @@ COMMENT ON TABLE payload_attributes IS
 CREATE TABLE node_failures (
     failure_id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     -- Identity
-    envelope_id           UUID        NOT NULL,
-    process_instance_id   UUID        NOT NULL,
+    envelope_id           TEXT        NOT NULL,
+    process_instance_id   TEXT        NOT NULL,
     process_definition_id TEXT        NOT NULL,
     node_id               TEXT        NOT NULL,
     handler_version       TEXT        NOT NULL,
     -- Timing
     failed_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- Error detail
-    error_type            TEXT        NOT NULL,  -- exception class name
-    error_message         TEXT        NOT NULL,
+    error_type            TEXT        NOT NULL,  -- NegotexError.code(), e.g. 'credit-bureau-timeout'
+    error_message         TEXT        NOT NULL,  -- NegotexError.message()
+    error_context         JSONB,                 -- NegotexHandlerException.data() contextual map
     stack_trace           TEXT,
     retry_count           INTEGER     NOT NULL DEFAULT 0,
     max_retries           INTEGER     NOT NULL,
@@ -155,8 +156,8 @@ COMMENT ON TABLE node_failures IS
 CREATE TABLE node_exits (
     exit_id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     -- Identity
-    envelope_id           UUID        NOT NULL,
-    process_instance_id   UUID        NOT NULL,
+    envelope_id           TEXT        NOT NULL,
+    process_instance_id   TEXT        NOT NULL,
     process_definition_id TEXT        NOT NULL,
     node_id               TEXT        NOT NULL,
     handler_version       TEXT        NOT NULL,  -- required for hash chain reproducibility
@@ -195,7 +196,7 @@ COMMENT ON TABLE node_exits IS
 CREATE TABLE process_completions (
     completion_id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     -- Identity
-    process_instance_id   UUID        NOT NULL UNIQUE,
+    process_instance_id   TEXT        NOT NULL UNIQUE,
     process_definition_id TEXT        NOT NULL,
     process_version       TEXT        NOT NULL,
     -- Outcome
@@ -260,7 +261,7 @@ CREATE TABLE retention_decisions (
     decided_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- Subject
     completion_id           UUID        NOT NULL REFERENCES process_completions (completion_id),
-    process_instance_id     UUID        NOT NULL,
+    process_instance_id     TEXT        NOT NULL,
     -- Policy inputs
     dominant_classification TEXT        NOT NULL,  -- which flag won multi-flag conflict
     anchor_flags            SMALLINT    NOT NULL,
