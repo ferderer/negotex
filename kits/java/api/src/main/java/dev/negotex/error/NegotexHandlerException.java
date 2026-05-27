@@ -1,6 +1,6 @@
 package dev.negotex.error;
 
-import dev.guard4j.exception.Guard4jException;
+import de.ferderer.guard4j.error.Guard4jException;
 
 /**
  * Exception thrown by Negotex handlers to signal a handled failure.
@@ -37,7 +37,7 @@ import dev.guard4j.exception.Guard4jException;
  * @see NegotexError
  * @see HandlerError
  */
-public class NegotexHandlerException extends Guard4jException {
+public class NegotexHandlerException extends NegotexException {
 
     /**
      * Create exception with the specified Negotex error code.
@@ -58,27 +58,5 @@ public class NegotexHandlerException extends Guard4jException {
      */
     public NegotexHandlerException(NegotexError error, Throwable cause) {
         super(error, cause);
-    }
-
-    /**
-     * The Negotex error code. Typed override — no cast required.
-     */
-    @Override
-    public NegotexError error() {
-        return (NegotexError) super.error();
-    }
-
-    /**
-     * Add contextual data. Fluent override for return type covariance.
-     *
-     * @param key   the data key
-     * @param value the data value (null allowed)
-     * @return this exception for chaining
-     * @throws NullPointerException if key is null
-     */
-    @Override
-    public NegotexHandlerException with(String key, Object value) {
-        super.with(key, value);
-        return this;
     }
 }

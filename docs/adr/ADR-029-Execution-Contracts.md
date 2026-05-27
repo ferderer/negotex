@@ -5,58 +5,67 @@
 | **Status** | Proposed |
 | **Level** | 5 — Compliance features |
 | **Priority** | PoC phase |
-| **Relates to** | ADR-005 (handlers as pure functions), ADR-017 (handler plugin architecture) |
+| **Relates to** | ADR-005 (handler model), ADR-017 (handler plugin architecture) |
 
 ## Context
 
-Business logic plugins (handlers) run inside the Negotex runtime. Without a formal contract, a plugin can make arbitrary network calls, allocate unbounded memory, or invoke external services not sanctioned by the process owner. In regulated environments, these capabilities must be declared and enforced — not trusted by convention.
+Business logic handlers run inside the Negotex runtime. Without a formal contract, a `DIRTY` handler (ADR-005) can make arbitrary network calls, allocate unbounded memory, or invoke external services not sanctioned by the process owner. In regulated environments, these capabilities must be declared and enforced — not trusted by convention.
 
-Two concerns are separate but related:
-- **Governance policies** (process/node level): what is the node *allowed* to do?
-- **Plugin capability declarations** (handler level): what does the plugin *claim to need*?
-
-At deployment, Negotex verifies that every plugin's declared capabilities are permitted by the governance policy of the node it is deployed into. A plugin that claims network access to `payment-gateway` will only deploy into a node whose policy allows that call. Violations are caught at deployment time, not at runtime.
+The governance policy in the process definition YAML is the single source of truth for what a node is permitted to do. Handler code does not carry capability annotations — the annotation approach would create two sources of truth and require the compiler to reconcile them. Instead, the handler's `Mode.DIRTY` declaration (ADR-005) signals that external access is possible, and the YAML governance policy declares what that access is allowed to be.
 
 ## Decision
 
 ### Governance policies (per node / per process)
 
-Governance policies are first-class citizens in the process definition — versioned, auditable, and runtime-enforceable:
+Governance policies are first-class citizens in the process definition YAML — versioned with the process, auditable, and validated at deployment time:
 
-```json
-{
-  "maxExecutionTime": "2s",
-  "maxMemoryUsage": "64MB",
-  "allowedExternalCalls": ["payment-gateway", "credit-bureau"],
-  "auditRetention": "7y",
-  "retryPolicy": "idempotent"
-}
+```yaml
+- id: charge-payment
+  type: map
+  handler: PaymentHandler
+  mode: dirty
+  consistency: eventual
+  governance:
+    maxExecutionTime: 2s
+    maxMemoryUsage: 64MB
+    allowedExternalCalls:
+      - payment-gateway
+    retryPolicy: idempotent
 ```
 
-### Plugin capability registry (per handler)
+A governance policy is required for all `DIRTY` handlers. The compiler rejects a `DIRTY` handler without a governance policy.
 
-Each handler declares its required runtime capabilities:
+`PURE` handlers do not carry governance policies — their mode structurally guarantees no external access.
 
-| Capability | Example value |
+### Governance policy fields
+
+| Field | Description |
 |---|---|
-| `networkAccess` | `true` / `false` |
-| `allowedOutboundServices` | `["payment-gateway", "credit-bureau"]` |
-| `cpuLimit` | `500m` |
-| `memoryLimit` | `64MB` |
-| `filesystemAccess` | `none` / `read-only` / `read-write` |
-| `cryptography` | `["AES-256", "SHA-256"]` |
+| `maxExecutionTime` | Maximum wall-clock time for handler execution |
+| `maxMemoryUsage` | Maximum heap allocation (enforcement is JVM / language dependent) |
+| `allowedExternalCalls` | Named external services the handler is permitted to call |
+| `retryPolicy` | `idempotent` (safe to retry) or `at-most-once` (no retry on failure) |
+| `auditRetention` | Retention period for audit events from this node, overrides process default |
 
-### Contract validation
+### Contract validation at deployment
 
-At topology compilation (deployment time), the console validates that every handler's declared capabilities are a subset of the permissions granted by the node's governance policy. Deployment fails with a validation error if any handler exceeds its node's policy.
+The process compiler validates each node's configuration at deployment:
+
+1. `DIRTY` handler without governance policy → **error**
+2. `DIRTY` handler with `allowedExternalCalls` not in the cluster's allowed service registry → **error**
+3. `PURE` handler with a governance policy → **warning** (policy is ignored but signals a misclassification)
+4. `DIRTY` + `deterministic` consistency → **warning** (see ADR-030)
+
+Runtime enforcement of `allowedExternalCalls` (actually blocking calls to non-declared services) requires classloader isolation or a security agent — this is declaration-only in the PoC phase, with runtime enforcement planned for the Enterprise Control Plane.
 
 ## Consequences
 
 **Positive:**
-- Security posture is explicit and auditable — process definitions contain the full security contract.
-- Violations are caught before deployment, not during a production incident.
-- Compliance officers can inspect process definitions and understand the security boundary of every node without reading handler code.
+- The YAML process definition is the complete, auditable record of what each node is permitted to do.
+- No handler code annotations required for capability declaration — one source of truth.
+- Compliance officers can inspect the process definition and understand every node's security boundary without reading handler code.
+- Violations are caught at deployment, not in production.
 
 **Negative:**
-- Runtime enforcement of capability constraints (e.g. actually blocking network calls not in the allowed list) requires either a security sandbox (JVM security manager equivalent, classloader isolation) or an agent — this is not trivially implementable in all handler languages.
-- Capability declarations require discipline from handler authors — incorrect declarations defeat the purpose.
+- Governance policy correctness depends on the handler author being honest about what their handler does. Incorrect declarations are caught only if runtime enforcement is active.
+- Runtime enforcement is declaration-only in the PoC — full sandboxing is deferred to the Enterprise Control Plane.

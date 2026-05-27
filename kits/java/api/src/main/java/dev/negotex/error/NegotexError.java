@@ -1,8 +1,8 @@
 package dev.negotex.error;
 
-import dev.guard4j.error.Error;
-import dev.guard4j.error.Categorizable;
-import dev.guard4j.error.Leveled;
+import de.ferderer.guard4j.Guard4jError;
+import de.ferderer.guard4j.error.Categorizable;
+import de.ferderer.guard4j.error.Leveled;
 
 /**
  * Marker interface for all Negotex error codes.
@@ -39,8 +39,8 @@ import dev.guard4j.error.Leveled;
  * <p>Additional dimensions ({@code Visible}, etc.) are optional — implement them
  * on the application error enum if needed. The processor checks via {@code instanceof}.
  *
- * @see NegotexHandlerException
+ * @see NegotexException
  * @see HandlerError
  */
-public interface NegotexError extends Error, Categorizable, Leveled {
+public interface NegotexError extends Guard4jError, Categorizable, Leveled {
 }

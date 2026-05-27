@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project
+    xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+>
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>dev.negotex</groupId>
+        <artifactId>negotex-parent</artifactId>
+        <version>0.1.0</version>
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>negotex-runtime</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Negotex Java Runtime</name>
+    <description>
+        Runtime engine — process compiler, node processors, publisher, handler registry.
+        No direct infrastructure dependencies — all transport, persistence, and
+        correlation state is provided by adapter modules via the factory pattern.
+    </description>
+
+    <dependencies>
+        <!-- ── Negotex ───────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-runtime-api</artifactId>
+        </dependency>
+
+        <!-- ── Spring Boot ─────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ── Jackson — PayloadConversions implementation ───────────────── -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>tools.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <version>3.0.0-rc2</version>
+        </dependency>
+    </dependencies>
+
+</project>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project
+    xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+>
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>dev.negotex</groupId>
+        <artifactId>negotex-parent</artifactId>
+        <version>0.1.0</version>
+        <relativePath>../../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>negotex-starter-micro</artifactId>
+    <packaging>pom</packaging>
+    <name>Negotex Starter — Micro</name>
+    <description>
+        Micro / embedded profile: in-process transport + H2 persistence + in-memory correlation.
+        Single JVM, no external infrastructure. For embedded use cases, local development,
+        and integration testing without Docker.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-runtime</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-transport-inprocess</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-persistence-h2</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-correlation-inmemory</artifactId>
+        </dependency>
+    </dependencies>
+</project>

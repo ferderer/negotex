@@ -5,44 +5,85 @@
 | **Status** | Proposed |
 | **Level** | 5 — Compliance features |
 | **Priority** | PoC phase |
-| **Relates to** | ADR-005 (handlers as pure functions), ADR-028 (hash chains) |
+| **Relates to** | ADR-005 (handler model), ADR-028 (hash chains), ADR-029 (execution contracts) |
 
 ## Context
 
-Not all nodes are equal from a determinism standpoint. A credit score calculation is deterministic — same input, same output, every time. A call to an external payment gateway is not — the result may differ based on the gateway's state, network conditions, or timing. Process engineers need a way to declare which nodes are deterministic and which are not, and auditors need to verify this declaration.
+Not all nodes are equal from a determinism standpoint. A credit score calculation is deterministic — same input, same output, every time. A call to an external payment gateway is not — the result may differ based on the gateway's state, network conditions, or timing.
 
-For certain regulatory certifications, an entire process must be reproducible — every step must produce the same result given the same input. This requires that all nodes in the process are deterministic.
+Process engineers need to declare which nodes are deterministic and which are not, for two reasons:
+
+1. **Auditors** need to verify that compliance-critical calculations are reproducible from the audit trail.
+2. **The runtime** needs to know whether a node can participate in Audit Certification Mode.
+
+The handler's `mode` (ADR-005) and the node's `consistency` are related but orthogonal. Mode describes the handler's *infrastructure contract* (what it has access to). Consistency describes the handler's *behavioural contract* (what its outputs guarantee). `PURE` mode implies `deterministic` consistency structurally. `DIRTY` mode requires an explicit consistency declaration because external access does not necessarily mean non-determinism — but it makes determinism harder to guarantee.
 
 ## Decision
 
-Every node definition declares its consistency contract:
+### Consistency declarations
 
-**`deterministic`:** The handler produces an identical output for identical inputs. No network calls, no time-dependent behaviour, no randomness. The processor enforces this by running the handler in an environment where such capabilities are unavailable (or at minimum, violations are logged as contract breaches). Suitable for: calculations, validations, transformations, rule evaluations.
+Every node definition declares its consistency contract in the process YAML:
 
-**`eventual`:** The handler may have side effects or produce non-reproducible results. Idempotency is the handler author's responsibility. Suitable for: external API calls, database lookups, email sending.
+**`deterministic`:** The handler produces an identical output for identical inputs. No network calls, no time-dependent behaviour, no randomness. Suitable for: calculations, validations, transformations, rule evaluations.
 
-**Node definition:**
+**`eventual`:** The handler may have side effects or produce non-reproducible results. Idempotency under retry is the handler author's responsibility. Suitable for: external API calls, email sending, database writes.
+
 ```yaml
 - id: calculate-risk-score
   type: map
   handler: RiskScoreHandler
-  consistency: deterministic
+  mode: pure
+  consistency: deterministic    # implied by mode: pure, but explicit is clearer
 
 - id: charge-payment
   type: map
-  handler: PaymentGatewayHandler
+  handler: PaymentHandler
+  mode: dirty
   consistency: eventual
+  governance:
+    allowedExternalCalls: [payment-gateway]
+    retryPolicy: idempotent
 ```
 
-**Audit Certification Mode (deployment-level flag):** When enabled, all nodes in the process must declare `deterministic`. Deployment fails if any node declares `eventual`. In this mode, a regulator can replay any historical process instance from its TimescaleDB audit trail and verify that the output matches the original — the hash chain (ADR-028) provides the verification anchor.
+### Relationship between mode and consistency
+
+| Mode | Consistency | Validity | Notes |
+|---|---|---|---|
+| `pure` | `deterministic` | ✅ valid | Structural guarantee — no side effects possible |
+| `pure` | `eventual` | ❌ error | A pure handler cannot have side effects by definition |
+| `dirty` | `eventual` | ✅ valid | Natural combination — external access with side effects |
+| `dirty` | `deterministic` | ⚠️ warning | Permitted, but the handler author must guarantee it; injected dependencies make this hard to verify |
+| `dirty` | not declared | ⚠️ warning | Assumed `eventual`; explicit declaration is preferred |
+
+`PURE` mode makes the `consistency: deterministic` declaration redundant but not wrong — the compiler accepts it and may omit it in generated process definitions to reduce noise.
+
+### Audit Certification Mode
+
+A deployment-level flag that enforces full process reproducibility:
+
+```yaml
+process:
+  id: loan-application
+  version: 1.3.0
+  auditCertification: true
+```
+
+When enabled:
+- All nodes must declare `consistency: deterministic` (or be `mode: pure`).
+- Any `eventual` node blocks deployment.
+- Any `dirty` node without a `deterministic` declaration blocks deployment.
+- The runtime verifies the hash chain (ADR-028) after each process instance completes, confirming that replay would produce identical results.
+
+In Audit Certification Mode, a regulator can replay any historical process instance from the TimescaleDB audit trail and verify that the output matches the original.
 
 ## Consequences
 
 **Positive:**
 - Consistency guarantees are explicit in the process definition — readable by process engineers, auditors, and automated tools.
+- The relationship between `mode` and `consistency` is formally defined — the compiler can catch contradictions at deployment.
 - Audit Certification Mode enables regulatory replay certification without additional tooling.
-- The `deterministic` declaration is the design-time companion to the runtime hash chain: the chain proves the execution happened as recorded; the `deterministic` contract proves the execution could be reproduced.
+- `PURE` + `deterministic` is the strongest compliance guarantee Negotex can offer — structurally enforced, not just declared.
 
 **Negative:**
-- Enforcing `deterministic` at the JVM level (blocking network access, etc.) is language and runtime dependent. Initial implementation may be declaration-only, with enforcement as a future enhancement.
-- Handler authors must correctly classify their handlers; incorrect `deterministic` declarations are not detectable without running the handler under controlled conditions.
+- `DIRTY` + `deterministic` is hard to verify without running the handler under controlled conditions. Enforcement is declaration-only in the PoC.
+- Audit Certification Mode excludes all `eventual` handlers — any process that calls an external service cannot be certified. This is intentional: certification and external calls are incompatible.

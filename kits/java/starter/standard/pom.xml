@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project
+    xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+>
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>dev.negotex</groupId>
+        <artifactId>negotex-parent</artifactId>
+        <version>0.1.0</version>
+        <relativePath>../../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>negotex-starter-standard</artifactId>
+    <packaging>pom</packaging>
+    <name>Negotex Starter — Standard</name>
+    <description>
+        Standard deployment profile: Kafka transport + TimescaleDB persistence + Valkey correlation.
+        Add this single dependency to get the full production stack.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-runtime</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-transport-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-persistence-timescale</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-correlation-valkey</artifactId>
+        </dependency>
+    </dependencies>
+</project>

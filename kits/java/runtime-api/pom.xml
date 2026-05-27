@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project
+    xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+>
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>dev.negotex</groupId>
+        <artifactId>negotex-parent</artifactId>
+        <version>0.1.0</version>
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>negotex-runtime-api</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Negotex Runtime API</name>
+    <description>
+        Shared model and interface contracts between the process compiler (ops),
+        the runtime engine, and all adapters. Contains:
+          - RuntimeManifest and definition model (pure data records)
+          - EnvelopeTransport / EnvelopeTransportFactory
+          - EnvelopeEventWriter / EnvelopeEventWriterFactory / EnvelopeEvent
+          - CorrelationStore / CorrelationStoreFactory
+          - Envelope record
+ 
+        No behaviour, no infrastructure dependencies beyond Jackson for YAML serialisation.
+    </description>
+
+    <dependencies>
+        <!-- ── Negotex ───────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>

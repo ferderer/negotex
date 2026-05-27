@@ -1,0 +1,167 @@
+process:
+  id: loan-application
+  version: 1.3.0
+  auditCertification: false
+  defaultMaxRetries: 3
+  defaultAuditRetention: 7y
+
+nodes:
+  - id: start
+    type: trigger
+    runtime: loan-core
+    handler: dev.acme.loan.LoanApplicationTriggerHandler
+    handlerVersion: 1.0.0
+    mode: pure
+    consistency: deterministic
+    triggerType: api
+    edges:
+      outgoing: [start-to-validate]
+
+  - id: validate
+    type: map
+    runtime: loan-core
+    handler: dev.acme.loan.ValidateApplicationHandler
+    handlerVersion: 1.1.0
+    mode: pure
+    consistency: deterministic
+    edges:
+      incoming: [start-to-validate]
+      outgoing: [validate-to-fork]
+
+  - id: split-checks
+    type: fork
+    edges:
+      incoming: [validate-to-fork]
+      outgoing: [fork-to-credit, fork-to-income, fork-to-fraud]
+
+  - id: credit-check
+    type: map
+    runtime: loan-core
+    handler: dev.acme.loan.CreditCheckHandler
+    handlerVersion: 2.1.0
+    mode: dirty
+    consistency: eventual
+    governance:
+      allowedExternalCalls: [credit-bureau]
+      maxExecutionTime: 5s
+      retryPolicy: idempotent
+    edges:
+      incoming: [fork-to-credit]
+      outgoing: [credit-to-join]
+
+  - id: income-check
+    type: map
+    runtime: loan-core
+    handler: dev.acme.loan.IncomeCheckHandler
+    handlerVersion: 1.0.0
+    mode: dirty
+    consistency: eventual
+    governance:
+      allowedExternalCalls: [income-verification-service]
+      maxExecutionTime: 5s
+      retryPolicy: idempotent
+    edges:
+      incoming: [fork-to-income]
+      outgoing: [income-to-join]
+
+  - id: fraud-check
+    type: map
+    runtime: loan-core
+    handler: dev.acme.loan.FraudCheckHandler
+    handlerVersion: 1.2.0
+    mode: dirty
+    consistency: eventual
+    governance:
+      allowedExternalCalls: [fraud-detection-service]
+      maxExecutionTime: 3s
+      retryPolicy: idempotent
+    edges:
+      incoming: [fork-to-fraud]
+      outgoing: [fraud-to-join]
+
+  - id: join-checks
+    type: join
+    expectedBranches: 3
+    mergeStrategy: attribute-merge
+    edges:
+      incoming: [credit-to-join, income-to-join, fraud-to-join]
+      outgoing: [join-to-decision]
+
+  - id: route-decision
+    type: choice
+    runtime: loan-core
+    handler: dev.acme.loan.LoanDecisionHandler
+    handlerVersion: 1.0.0
+    mode: pure
+    consistency: deterministic
+    conditionStrategy: handler
+    edges:
+      incoming: [join-to-decision]
+      outgoing:
+        - id: decision-to-approve
+          condition: approved
+        - id: decision-to-manual-review
+          condition: manualReviewRequired
+        - id: decision-to-reject
+          default: true
+
+  - id: await-approval
+    type: wait
+    runtime: loan-core
+    handler: dev.acme.loan.ManualApprovalWaitHandler
+    handlerVersion: 1.0.0
+    mode: dirty
+    consistency: eventual
+    timerExpression: PT48H
+    governance:
+      allowedExternalCalls: [notification-service, task-management-service]
+      retryPolicy: idempotent
+    edges:
+      incoming: [decision-to-manual-review]
+      outgoing: [approval-to-terminate]
+
+  - id: end-approved
+    type: terminate
+    runtime: loan-core
+    handler: dev.acme.loan.ApprovalNotificationHandler
+    handlerVersion: 1.0.0
+    mode: dirty
+    consistency: eventual
+    governance:
+      allowedExternalCalls: [notification-service]
+      retryPolicy: idempotent
+    edges:
+      incoming: [decision-to-approve]
+
+  - id: end-manually-approved
+    type: terminate
+    runtime: loan-core
+    handler: dev.acme.loan.ApprovalNotificationHandler
+    handlerVersion: 1.0.0
+    mode: dirty
+    consistency: eventual
+    governance:
+      allowedExternalCalls: [notification-service]
+      retryPolicy: idempotent
+    edges:
+      incoming: [approval-to-terminate]
+
+  - id: end-rejected
+    type: terminate
+    edges:
+      incoming: [decision-to-reject]
+
+edges:
+  - id: start-to-validate
+  - id: validate-to-fork
+  - id: fork-to-credit
+  - id: fork-to-income
+  - id: fork-to-fraud
+  - id: credit-to-join
+  - id: income-to-join
+  - id: fraud-to-join
+  - id: join-to-decision
+  - id: decision-to-approve
+  - id: decision-to-manual-review
+  - id: decision-to-reject
+  - id: approval-to-terminate

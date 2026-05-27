@@ -1,0 +1,29 @@
+runtimes:
+  - name: loan-core
+    language: java
+    handlerArtifacts:
+      - s3://acme-artifacts/loan-handlers-1.0.jar      # core loan team
+      - s3://acme-artifacts/credit-handlers-2.1.jar    # credit risk team
+      - s3://acme-artifacts/fraud-handlers-1.2.jar     # fraud team
+    nodes:
+      - start
+      - validate
+      - split-checks
+      - credit-check
+      - income-check
+      - fraud-check
+      - join-checks
+      - route-decision
+      - await-approval
+      - end-approved
+      - end-manually-approved
+      - end-rejected
+
+infrastructure:
+  kafkaBrokers: kafka:9092
+  valkeyUrl: redis://valkey:6379
+  timescaleDb:
+    url: jdbc:postgresql://timescaledb:5432/negotex
+    user: negotex
+    passwordRef: ${TIMESCALEDB_PASSWORD}
+  victoriaMetricsUrl: http://victoriametrics:8428/api/v1/write

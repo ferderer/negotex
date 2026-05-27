@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project
+    xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+>
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>dev.negotex</groupId>
+        <artifactId>negotex-parent</artifactId>
+        <version>0.1.0</version>
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>negotex-annotation-processor</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Negotex Annotation Processor</name>
+    <description>
+        Compile-time annotation processor for Negotex handler validation and code generation.
+        Processes @PayloadInput, @PayloadOutput, and @PayloadKey to generate
+        PayloadExtractor and PayloadInserter implementations at compile time.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.negotex</groupId>
+            <artifactId>negotex-api</artifactId>
+        </dependency>
+
+        <!-- Code generation — ships inside the processor JAR, not in handler JARs -->
+        <dependency>
+            <groupId>com.squareup</groupId>
+            <artifactId>javapoet</artifactId>
+            <version>1.13.0</version>
+        </dependency>
+
+        <!-- Unit tests for validators (Mockito, no compiler involvement) -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>25</release>
+                    <!--
+                        Disable annotation processing during compilation of the processor
+                        itself — without this, Maven tries to run the processor on its own
+                        source files, which fails because the processor JAR isn't built yet.
+                    -->
+                    <compilerArgument>-proc:none</compilerArgument>
+                </configuration>
+            </plugin>
+
+            <!--
+                Integration tests via maven-invoker-plugin.
+                Each project under src/test/projects/ is a minimal Maven project
+                that exercises the annotation processor against real handler code.
+                The invoker runs 'mvn compile' on each project and asserts
+                success/failure via invoker.properties, then runs verify.groovy
+                to assert on the generated source content.
+            -->
+            <plugin>
+                <artifactId>maven-invoker-plugin</artifactId>
+                <version>3.10.1</version>
+                <configuration>
+                    <projectsDirectory>src/test/projects</projectsDirectory>
+                    <cloneProjectsTo>${project.build.directory}/it</cloneProjectsTo>
+                    <!--
+                        Filter POMs to replace @project.version@ with the actual version.
+                        This ensures test projects always use the just-built processor JAR.
+                    -->
+                    <filterProperties>
+                        <project.version>${project.version}</project.version>
+                    </filterProperties>
+                    <pomIncludes>
+                        <pomInclude>*/pom.xml</pomInclude>
+                    </pomIncludes>
+                    <goals>
+                        <goal>compile</goal>
+                    </goals>
+                    <!-- Write full build output to build.log in each project dir -->
+                    <streamLogs>false</streamLogs>
+                    <showErrors>true</showErrors>
+                    <!-- Run verify.groovy after each project build -->
+                    <postBuildHookScript>verify</postBuildHookScript>
+                    <!--
+                        Use the user's own ~/.m2 rather than the default isolated
+                        target/local-repo. The isolated repo only gets reactor artifacts
+                        from invoker:install — transitive deps like guard4j-api and
+                        negotex-java-api (when building the module standalone) are missing
+                        there, so test projects fail to compile before the processor runs.
+                    -->
+                    <localRepositoryPath>${settings.localRepository}</localRepositoryPath>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>integration-test</id>
+                        <goals>
+                            <goal>install</goal>
+                            <goal>run</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

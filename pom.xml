@@ -22,42 +22,101 @@
     </licenses>
 
     <modules>
+        <!-- Core API modules — build order matters -->
         <module>kits/java/api</module>
+        <module>kits/java/runtime-api</module>
+        <module>kits/java/annotation-processor</module>
         <module>kits/java/runtime</module>
-        <module>ops</module>
-        <module>cli</module>
+ 
+        <!-- Adapters -->
+        <module>kits/java/adapter/transport-kafka</module>
+        <module>kits/java/adapter/transport-inprocess</module>
+        <module>kits/java/adapter/persistence-timescale</module>
+        <module>kits/java/adapter/persistence-noop</module>
+        <module>kits/java/adapter/persistence-h2</module>
+        <module>kits/java/adapter/correlation-valkey</module>
+        <module>kits/java/adapter/correlation-inmemory</module>
+ 
+        <!-- Starters -->
+        <module>kits/java/starter/standard</module>
+        <module>kits/java/starter/micro</module>
+ 
+        <!-- Tooling (commented until implemented) -->
+        <!-- <module>ops</module> -->
+        <!-- <module>cli</module> -->
     </modules>
 
-    <properties>
-        <java.version>21</java.version>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <!-- Spring Boot -->
-        <spring-boot.version>4.0.5</spring-boot.version>
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spring-boot.version>4.0.6</spring-boot.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <!-- Internal modules -->
+            <!-- ── Internal modules ──────────────────────────────────────── -->
             <dependency>
                 <groupId>dev.negotex</groupId>
-                <artifactId>negotex-java-api</artifactId>
+                <artifactId>negotex-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>dev.negotex</groupId>
-                <artifactId>negotex-java-runtime</artifactId>
+                <artifactId>negotex-runtime-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>dev.negotex</groupId>
-                <artifactId>negotex-ops</artifactId>
+                <artifactId>negotex-runtime</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.negotex</groupId>
+                <artifactId>negotex-annotation-processor</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- Spring Boot BOM -->
+            <!-- Adapters -->
+            <dependency>
+                <groupId>dev.negotex</groupId>
+                <artifactId>negotex-transport-kafka</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.negotex</groupId>
+                <artifactId>negotex-transport-inprocess</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.negotex</groupId>
+                <artifactId>negotex-persistence-timescale</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>dev.negotex</groupId>
+                <artifactId>negotex-persistence-noop</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.negotex</groupId>
+                <artifactId>negotex-persistence-h2</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>dev.negotex</groupId>
+                <artifactId>negotex-correlation-valkey</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.negotex</groupId>
+                <artifactId>negotex-correlation-inmemory</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- ── Spring Boot BOM ───────────────────────────────────────── -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -66,54 +125,45 @@
                 <scope>import</scope>
             </dependency>
 
-            <!-- Kafka -->
+            <!-- ── Guard4j ───────────────────────────────────────────────── -->
+            <dependency>
+                <groupId>de.ferderer.guard4j</groupId>
+                <artifactId>guard4j-api</artifactId>
+                <version>1.0.0</version>
+            </dependency>
+
+            <!-- ── Infrastructure clients ────────────────────────────────── -->
             <dependency>
                 <groupId>org.apache.kafka</groupId>
                 <artifactId>kafka-clients</artifactId>
                 <version>4.2.0</version>
             </dependency>
-
-            <!-- Valkey / Redis client -->
             <dependency>
                 <groupId>io.lettuce</groupId>
                 <artifactId>lettuce-core</artifactId>
-                <version>6.7.1.RELEASE</version>
+                <version>7.5.1.RELEASE</version>
             </dependency>
-
-            <!-- TimescaleDB (PostgreSQL driver) -->
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
-                <version>42.7.10</version>
+                <version>42.7.11</version>
+            </dependency>
+            <dependency>
+                <groupId>com.h2database</groupId>
+                <artifactId>h2</artifactId>
+                <version>2.1.214</version>
             </dependency>
 
-            <!-- Jackson -->
+            <!-- ── Serialisation ─────────────────────────────────────────── -->
             <dependency>
-                <groupId>tools.jackson.core</groupId>
-                <artifactId>jackson-databind</artifactId>
-                <version>3.1.0</version>
-            </dependency>
-
-            <!-- Testing -->
-            <dependency>
-                <groupId>org.junit.jupiter</groupId>
-                <artifactId>junit-jupiter</artifactId>
-                <version>6.0.3</version>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.assertj</groupId>
-                <artifactId>assertj-core</artifactId>
-                <version>3.27.7</version>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-bom</artifactId>
-                <version>2.0.4</version>
-                <type>pom</type>
+                <groupId>tools.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>3.1.3</version>
                 <scope>import</scope>
-            </dependency>
+                <type>pom</type>
+            </dependency> 
+
+            <!-- ── Testing ───────────────────────────────────────────────── -->
         </dependencies>
     </dependencyManagement>
 
@@ -125,27 +175,18 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.15.0</version>
                     <configuration>
-                        <release>21</release>
-                        <compilerArgs>
-                            <arg>--enable-preview</arg>
-                        </compilerArgs>
+                        <release>25</release>
                     </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.5</version>
-                    <configuration>
-                        <argLine>--enable-preview</argLine>
-                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-failsafe-plugin</artifactId>
                     <version>3.5.5</version>
-                    <configuration>
-                        <argLine>--enable-preview</argLine>
-                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.springframework.boot</groupId>
