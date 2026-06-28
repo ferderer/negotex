@@ -4,7 +4,7 @@
 
 Negotex compiles BPMN process definitions directly to message topologies — each edge becomes a Kafka topic, each node a stateless stream processor. No central coordinator. No database polling. No single point of failure.
 
-> **Status:** Active development — PoC phase. Not yet production-ready.
+> **Status:** Active development — Java runtime substantially implemented. 14-module Maven build passing. Not yet production-ready.
 
 ---
 
@@ -33,13 +33,13 @@ Negotex covers the full BPMN execution model with a minimal, orthogonal set of p
 |---|---|---|
 | **Map** | Service Task | `Input → Output`, pure handler function |
 | **Fork** | Parallel Gateway (split) | Fans out to all branches simultaneously |
-| **Join** | Parallel Gateway (join) | Waits for all expected branches |
-| **Choice** | Exclusive Gateway (XOR) | Routes to exactly one branch via condition |
-| **Merge** | Inclusive Gateway (join) | Accepts first-arriving branch |
-| **Filter** | — | Passes or drops envelope based on predicate |
+| **Join** | Parallel Gateway (join) | Waits for all expected branches, verifies origin hash |
+| **Choice** | Exclusive Gateway (split) | Routes to exactly one branch via condition |
+| **Merge** | Exclusive Gateway (join) | Passes the first-arriving envelope, no synchronisation |
+| **Filter** | Inclusive Gateway (split) | Activates 0–N outgoing branches via predicate |
 | **Wait** | Intermediate Catch Event | Suspends until external signal or timer |
-| **Trigger** | Start Event | Creates the envelope, entry point for the process |
-| **Terminate** | End Event / Termination | Ends the process instance |
+| **Trigger** | Start Event | Creates the initial envelope — entry point for the process |
+| **Terminate** | End Event | Ends the process instance, writes the compliance record |
 
 ---
 
@@ -47,28 +47,23 @@ Negotex covers the full BPMN execution model with a minimal, orthogonal set of p
 
 **No orchestrator.** The process graph *is* the message topology. Processors are stateless and independently scalable.
 
-**Compliance-first.** Envelope hash chains produce a tamper-evident audit trail — `Hash(previousHash + result + timestamp + handlerVersion)` — without external systems or blockchain overhead. Neither Camunda nor Temporal offer native cryptographic chaining.
+**Compliance-first.** Envelope hash chains produce a tamper-evident audit trail without external systems or blockchain overhead:
 
-**Handlers are pure functions.** Business logic has zero infrastructure dependencies: `Input → Output`. The node processor handles all infrastructure concerns.
+```
+EnvelopeHash = SHA-256(previousHash § executionResult § timestamp § handlerVersion)
+```
+
+`executionResult` is canonicalised deterministically (sorted map keys at all levels, stable types) so the chain is reproducible by a verifier given only the audit trail. `handlerVersion` is persisted on every audit record. Neither Camunda nor Temporal offer native cryptographic chaining.
+
+**Handlers are pure functions.** Business logic has zero infrastructure dependencies — `Input → Output`. The node processor handles all infrastructure concerns: Kafka consumption, Valkey state, TimescaleDB writes, metrics.
+
+**Transport metadata stays out of the payload.** Delivery metadata (incoming edge, retry count) is passed to processors via `ReceivedEnvelope(Envelope, DeliveryContext)` — never written into the business payload. Join merges are never poisoned by transport keys.
+
+**Stateful nodes fail safely.** `JoinProcessor` and `WaitProcessor` implement `StatefulProcessor` — a marker interface that routes them directly to DLQ on failure. Retrying a stateful node while a correlation claim is live would silently discard the envelope; this is prevented structurally, not by configuration.
 
 **Zero-downtime versioning.** Each process version gets isolated topics. Live processes drain while new versions go live — no coordinated cutover required.
 
-**Execution contracts.** Every node declares its consistency model (deterministic or eventual) and every handler declares its runtime capabilities. Violations are caught at deployment, not at runtime.
-
----
-
-## Architecture
-
-![Negotex Architecture](docs/architecture.png)
-
-**Handler lifecycle per node:**
-1. Receive `Envelope<T>` from incoming Kafka topic
-2. Persist `ENTERED` event to TimescaleDB (async)
-3. Call handler: `Input → Output`
-4. Publish outgoing envelope(s) to target topic(s)
-5. Persist `EXITED` or `FAILED` event (async)
-
-State persistence is fire-and-forget — it never blocks the hot path.
+**Execution contracts.** Every node declares its consistency model (`deterministic` or `eventual`) and every handler declares its runtime capabilities. Violations are caught at deployment, not at runtime.
 
 ---
 
@@ -77,12 +72,36 @@ State persistence is fire-and-forget — it never blocks the hot path.
 | Component | Role |
 |---|---|
 | Kafka 4+ (KRaft) | Edge transport — one topic per process edge |
-| TimescaleDB | Audit trail + envelope event persistence |
-| Valkey | Correlation state for Fork/Join |
+| TimescaleDB | Audit trail — `handler_version` and `envelope_hash` on every record |
+| Valkey | Correlation state for Join/Wait |
 | VictoriaMetrics | Observability |
 | Java 21+ | Runtime — Virtual Threads for processor pools |
 
 Redpanda is a supported drop-in for Kafka in lighter deployments.
+
+---
+
+## Module structure
+
+The Java kit is a 14-module Maven project:
+
+```
+negotex-java-api              — public handler interfaces (TaskHandler, ChoiceHandler, …)
+negotex-runtime-api           — Envelope, Publisher, EnvelopeTransport, EnvelopeEvent,
+                                HashChainStep, ExecutionResultCanonicalizer, DeliveryContext
+negotex-annotation-processor  — @NegotexHandler processing
+negotex-java-runtime          — nine node processors, ProcessorStarter, DefaultPublisher
+negotex-transport-kafka       — KafkaEnvelopeTransport (AcknowledgingMessageListener)
+negotex-transport-inprocess   — InProcessEnvelopeTransport (QueuedEnvelope, no broker)
+negotex-persistence-timescale — TimescaleDB writer, canonical DDL
+negotex-persistence-h2        — H2 writer for local dev, same schema as Timescale
+negotex-persistence-noop      — no-op writer for PoC / CI
+negotex-correlation-valkey    — ValkeyCorrelationStore (Lua atomic claim)
+negotex-correlation-inmemory  — InMemoryCorrelationStore (claim expiry, 300s TTL)
+negotex-starter-standard      — Kafka + TimescaleDB + Valkey (production)
+negotex-starter-micro         — in-process transport + in-memory correlation (no Docker)
+negotex-starter-test          — test convenience dependencies
+```
 
 ---
 
@@ -113,6 +132,8 @@ nodes:
       outgoing: credit-checked
 ```
 
+Handlers are unit-testable without any mocking of infrastructure. The same handler runs identically in the test micro stack and the production Kafka stack.
+
 ---
 
 ## Deployment
@@ -128,9 +149,12 @@ services:
     environment:
       NEGOTEX_HANDLERS_PATH: /handlers/loan-app.jar
       NEGOTEX_PROCESS_CONFIG: /config/loan-app.yaml
+      KAFKA_BROKERS: kafka:9092
+      TIMESCALEDB_URL: jdbc:postgresql://timescaledb:5432/negotex
+      VALKEY_URL: valkey:6379
 ```
 
-**Enterprise** — Kubernetes + Enterprise Control Plane. Each node type scales independently as a separate deployment.
+**Enterprise** — Kubernetes + Enterprise Control Plane (Rust). Each node type scales independently as a separate Deployment. The ECP Operator manages `NegotexRuntime` CRDs, sidecar injection, and topic lifecycle. GitOps-compatible: every UI action produces a CRD that can be authored as a manifest.
 
 ---
 
@@ -144,7 +168,9 @@ Handlers are not limited to Java. Negotex is building processor kits for:
 | `negotex-fsharp` | Phase 2 | Financial markets, quant, risk |
 | `negotex-rust` | Phase 3 | Systems-level, security-critical nodes |
 
-F# is prioritised for Phase 2 because of its dominance in financial services domain modelling.
+F# is prioritised for Phase 2 because of its dominance in financial services domain modelling — algebraic types and discriminated unions are a natural fit for regulated domains where invalid states must be unrepresentable.
+
+Each language kit communicates directly with Kafka using native clients. There is no External Task polling pattern — no language is a second-class citizen.
 
 ---
 
@@ -156,23 +182,35 @@ F# is prioritised for Phase 2 because of its dominance in financial services dom
 | All nine primitives | ✅ | ✅ |
 | Envelope hash chains | ✅ | ✅ |
 | Execution contracts | ✅ | ✅ |
+| Consistency contracts | ✅ | ✅ |
 | OSS console | ✅ | ✅ |
 | Multi-cluster management | — | ✅ |
 | Blue/green deployments | — | ✅ |
 | Process replay debugging | — | ✅ |
 | Compliance reporting | — | ✅ |
+| Kubernetes Operator | — | ✅ |
 | SLA + support | — | ✅ |
 
-The community edition is complete and production-ready — not a teaser.
+The community edition is complete and production-ready — not a teaser. Any team can run Negotex in production without a commercial licence.
+
+Pricing is per-cluster, not per-execution. No metering surprises as process volume grows.
 
 ---
 
 ## Project status
 
-- [x] Architecture decisions (22 ADRs across six levels)
-- [x] arc42 concept document
-- [ ] PoC implementation (Java / Spring Boot)
-- [ ] `ProcessDefinitionBuilder` fluent API
+- [x] 39 Architecture Decision Records across seven levels
+- [x] arc42 system architecture document
+- [x] Java runtime — 14 modules, BUILD SUCCESS (~2,600 lines)
+- [x] All nine node primitives (Map, Fork, Join, Choice, Merge, Filter, Wait, Trigger, Terminate)
+- [x] Envelope hash chains — ADR-028 compliant (`HashChainStep`, `ExecutionResultCanonicalizer`)
+- [x] Audit persistence — `handler_version` + `envelope_hash` on all TimescaleDB / H2 records
+- [x] Transport abstraction — `DeliveryContext`, `ReceivedEnvelope`, `StatefulProcessor`
+- [x] Retry-topic pattern for stateless nodes; stateful nodes fail directly to DLQ
+- [x] `negotex-starter-micro` — full integration testing without Docker
+- [ ] First integration test (Trigger → Map → Terminate, micro stack)
+- [ ] `TriggerProcessor` REST endpoint
+- [ ] `ops/` compiler module — BPMN/YAML → RuntimeManifest
 - [ ] OSS console (Okygraph + Svelte islands)
 - [ ] `negotex-fsharp` processor kit
 - [ ] Enterprise Control Plane (Rust)
@@ -181,12 +219,13 @@ The community edition is complete and production-ready — not a teaser.
 
 ## Documentation
 
-- [`/docs/ADRs.md`](./docs/ADRs.md) — Architecture Decision Records
+- [`/docs/adr/`](./docs/adr/) — 39 Architecture Decision Records
 - [`/docs/arc42.md`](./docs/arc42.md) — System architecture (arc42 format)
+- [`/kits/java/adapter/persistence-timescale/src/main/resources/db/audit-event-schema.sql`](./kits/java/adapter/persistence-timescale/src/main/resources/db/audit-event-schema.sql) — Canonical TimescaleDB DDL
 
 ---
 
 ## License
 
-Community edition: [Apache 2.0](LICENSE)
+Community edition: [Apache 2.0](LICENSE)  
 Enterprise Control Plane: Commercial — contact for licensing.
