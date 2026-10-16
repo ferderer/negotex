@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Superseded by ADR-040 |
 | **Level** | 7 — Tooling |
 | **Relates to** | ADR-032 (OSS console vs Enterprise CP) |
 
@@ -15,3 +15,7 @@ The OSS console uses Okygraph (Vadim's own template engine) for server-side rend
 ## Consequences
 
 Fast time-to-first-byte. Minimal JavaScript footprint. The console doubles as a live integration test for Okygraph. Maintaining a custom template engine adds a dependency that must be kept compatible with console feature requirements.
+
+## Superseded
+
+Replaced by ADR-040: the console is a Svelte 5 SPA with Texivia routing. SEO and the no-JS fallback do not matter for an internal operations tool, and a single UI technology for OSS console and ECP outweighs the showcase argument. Okygraph continues to serve negotex.dev and the documentation.

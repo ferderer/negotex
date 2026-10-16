@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted (amended) |
 | **Level** | 3 — Multilanguage & runtime |
-| **Relates to** | ADR-026 (topic naming) |
+| **Relates to** | ADR-026 (topic naming), ADR-042 (retry and DLQ) |
 
 ## Context
 
@@ -12,14 +12,14 @@ Process definitions change. A new version may modify handler logic, add nodes, o
 
 ## Decision
 
-Each process version gets its own isolated set of Kafka topics:
+Each process version gets its own isolated set of Kafka topics, named according to ADR-026:
 
 ```
-{processId}-v{version}.edge-{edgeId}
+{processId}-v{version}.edge.{sourceNodeId}-to-{targetNodeId}
 
 Examples:
-  loan-app-v1.2.0.edge-validate
-  loan-app-v1.3.0.edge-validate   ← new version, separate topic
+  loan-app-v1.2.0.edge.start-to-validate
+  loan-app-v1.3.0.edge.start-to-validate   ← new version, separate topic
 ```
 
 The deployment strategy is **drain-and-switch**:
@@ -27,8 +27,8 @@ The deployment strategy is **drain-and-switch**:
 1. Deploy new version (creates new topics, starts new processor instances).
 2. Pause the old version's Trigger node — no new instances start on the old version.
 3. Old processor instances continue consuming from old topics until all in-flight instances complete.
-4. Monitor active instance count on the old version.
-5. When count reaches zero, remove old processor instances and delete old topics.
+4. Monitor active instance count on the old version. An instance whose envelope is parked in a DLQ (ADR-042) counts as active.
+5. When count reaches zero and all DLQ topics of the old version are empty, remove old processor instances and delete old topics.
 
 ```yaml
 process:
@@ -40,9 +40,9 @@ process:
     drainTimeout: 24h
 ```
 
-`drainTimeout` sets the maximum time to wait before force-removing old instances. Any instances still running after the timeout move to the DLQ with a migration-timeout error.
+`drainTimeout` sets the maximum time to wait before force-removing old instances. When it expires, `ops` moves the envelopes still in the edge topics of the old version into the DLQ of the consuming node with reason `MIGRATION_TIMEOUT` (ADR-042). Topics of a version with a non-empty DLQ are only deleted when explicitly forced.
 
-A `gradual-rollout` strategy (percentage-based traffic split between versions) is planned for the Enterprise Control Plane. A differential subgraph deployment is also planned as an Enterprise Control Plane feature.
+A `gradual-rollout` strategy (percentage-based traffic split between versions) is planned for the Enterprise Control Plane.
 
 ## Consequences
 
@@ -54,3 +54,9 @@ A `gradual-rollout` strategy (percentage-based traffic split between versions) i
 **Negative:**
 - Both versions run simultaneously during the drain window, consuming Kafka resources for both topic sets.
 - Long-running instances extend the drain window; `drainTimeout` is a safety valve, not a substitute for appropriate process timeouts.
+- Instances parked in a DLQ keep an old version alive until they are redriven or discarded.
+
+## Amendment history
+
+- Topic naming corrected from `edge-{edgeId}` to the ADR-026 scheme, matching the implementation.
+- DLQ handling added (ADR-042).
